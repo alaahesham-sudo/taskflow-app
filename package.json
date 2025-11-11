@@ -1,0 +1,9 @@
+{
+  "name": "taskflow-manager",
+  "version": "1.0.0",
+  "description": "Modern task management tool - Vercel + Supabase",
+  "scripts": {
+    "dev": "cd client && npm run dev"
+  },
+  "license": "MIT"
+}
