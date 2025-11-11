@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,15 +13,15 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  if (!supabase) {
+    return res.status(500).json({ error: 'Supabase not configured' });
+  }
+
   if (req.method === 'GET') {
     try {
       const { data: dependencies, error } = await supabase
         .from('dependencies')
-        .select(`
-          *,
-          task1:tasks!dependencies_task_id_fkey(id, title, status),
-          task2:tasks!dependencies_depends_on_task_id_fkey(id, title, status)
-        `)
+        .select('*, task1:tasks!dependencies_task_id_fkey(id, title, status), task2:tasks!dependencies_depends_on_task_id_fkey(id, title, status)')
         .eq('type', 'blocks');
 
       if (error) throw error;
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
       return res.status(200).json(conflicts);
     } catch (error) {
       console.error('Error:', error);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message || 'Internal server error' });
     }
   }
 
