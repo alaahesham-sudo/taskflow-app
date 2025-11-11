@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -28,84 +28,42 @@ export default async function handler(req, res) {
         .single();
 
       if (error) throw error;
-      if (!task) return res.status(404).json({ error: 'Task not found' });
 
-      const [notesRes, depsRes, blockersRes] = await Promise.all([
-        supabase.from('notes').select('*').eq('task_id', id).order('created_at', { ascending: false }),
-        supabase.from('dependencies').select('*, depends_on_task:tasks!dependencies_depends_on_task_id_fkey(title)').eq('task_id', id),
-        supabase.from('dependencies').select('*, blocking_task:tasks!dependencies_task_id_fkey(title)').eq('depends_on_task_id', id).eq('type', 'blocks')
-      ]);
+      const { data: notes } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('task_id', id)
+        .order('created_at', { ascending: false });
+
+      const { data: deps } = await supabase
+        .from('dependencies')
+        .select('depends_on_id')
+        .eq('task_id', id);
+
+      const { data: blockers } = await supabase
+        .from('dependencies')
+        .select('task_id')
+        .eq('depends_on_id', id);
 
       return res.status(200).json({
         ...task,
-        notes: notesRes.data || [],
-        dependencies: (depsRes.data || []).map(d => ({
-          ...d,
-          depends_on_title: d.depends_on_task?.title
-        })),
-        blockers: (blockersRes.data || []).map(b => ({
-          ...b,
-          blocking_title: b.blocking_task?.title
-        }))
+        notes: notes || [],
+        dependencies: deps ? deps.map(d => d.depends_on_id) : [],
+        blockers: blockers ? blockers.map(b => b.task_id) : []
       });
     }
 
     if (req.method === 'PUT') {
-      const { title, description, status, priority, assignee, progress, due_date, estimated_hours, actual_hours } = req.body;
-
-      const { data: oldTask } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', id)
-        .single();
-
       const { data: task, error } = await supabase
         .from('tasks')
-        .update({
-          title: title ?? oldTask?.title,
-          description: description ?? oldTask?.description,
-          status: status ?? oldTask?.status,
-          priority: priority ?? oldTask?.priority,
-          assignee: assignee ?? oldTask?.assignee,
-          progress: progress ?? oldTask?.progress,
-          due_date: due_date ?? oldTask?.due_date,
-          estimated_hours: estimated_hours ?? oldTask?.estimated_hours,
-          actual_hours: actual_hours ?? oldTask?.actual_hours,
-          updated_at: new Date().toISOString()
-        })
+        .update(req.body)
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
 
-      if (status && oldTask && status !== oldTask.status) {
-        await supabase.from('activity_log').insert({
-          task_id: id,
-          action: 'status_changed',
-          details: `Status changed from ${oldTask.status} to ${status}`,
-          user_name: assignee || 'Manager'
-        });
-      }
-
-      const [notesRes, depsRes, blockersRes] = await Promise.all([
-        supabase.from('notes').select('*').eq('task_id', id).order('created_at', { ascending: false }),
-        supabase.from('dependencies').select('*, depends_on_task:tasks!dependencies_depends_on_task_id_fkey(title)').eq('task_id', id),
-        supabase.from('dependencies').select('*, blocking_task:tasks!dependencies_task_id_fkey(title)').eq('depends_on_task_id', id).eq('type', 'blocks')
-      ]);
-
-      return res.status(200).json({
-        ...task,
-        notes: notesRes.data || [],
-        dependencies: (depsRes.data || []).map(d => ({
-          ...d,
-          depends_on_title: d.depends_on_task?.title
-        })),
-        blockers: (blockersRes.data || []).map(b => ({
-          ...b,
-          blocking_title: b.blocking_task?.title
-        }))
-      });
+      return res.status(200).json(task);
     }
 
     if (req.method === 'DELETE') {
@@ -115,6 +73,7 @@ export default async function handler(req, res) {
         .eq('id', id);
 
       if (error) throw error;
+
       return res.status(200).json({ success: true });
     }
 

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -19,29 +19,34 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      const { data: dependencies, error } = await supabase
-        .from('dependencies')
-        .select('*, task1:tasks!dependencies_task_id_fkey(id, title, status), task2:tasks!dependencies_depends_on_task_id_fkey(id, title, status)')
-        .eq('type', 'blocks');
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select('*');
 
       if (error) throw error;
 
-      const conflicts = dependencies
-        .filter(d => 
-          d.task1 && 
-          ['in_progress', 'done'].includes(d.task1.status) && 
-          d.task2 && 
-          d.task2.status !== 'done'
-        )
-        .map(d => ({
-          task1_id: d.task1.id,
-          task1_title: d.task1.title,
-          task1_status: d.task1.status,
-          task2_id: d.task2.id,
-          task2_title: d.task2.title,
-          task2_status: d.task2.status,
-          type: d.type
-        }));
+      const conflicts = [];
+      const taskMap = new Map();
+      
+      tasks.forEach(task => {
+        if (task.assignee && task.status !== 'done') {
+          if (!taskMap.has(task.assignee)) {
+            taskMap.set(task.assignee, []);
+          }
+          taskMap.get(task.assignee).push(task);
+        }
+      });
+
+      taskMap.forEach((userTasks, assignee) => {
+        if (userTasks.length > 3) {
+          conflicts.push({
+            type: 'overload',
+            assignee: assignee,
+            count: userTasks.length,
+            tasks: userTasks.map(t => t.id)
+          });
+        }
+      });
 
       return res.status(200).json(conflicts);
     } catch (error) {

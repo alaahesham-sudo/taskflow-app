@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -21,45 +21,33 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      const { depends_on_task_id, type } = req.body;
-
-      if (id === depends_on_task_id) {
-        return res.status(400).json({ error: 'Task cannot depend on itself' });
-      }
-
-      const { data: dependency, error } = await supabase
+      const { depends_on_id } = req.body;
+      
+      const { data: dep, error } = await supabase
         .from('dependencies')
         .insert({
           task_id: id,
-          depends_on_task_id,
-          type: type || 'blocks'
+          depends_on_id: depends_on_id
         })
-        .select('*, depends_on_task:tasks!dependencies_depends_on_task_id_fkey(title)')
+        .select()
         .single();
 
       if (error) throw error;
 
-      await supabase.from('activity_log').insert({
-        task_id: id,
-        action: 'dependency_added',
-        details: 'Dependency added',
-        user_name: 'Manager'
-      });
-
-      return res.status(201).json({
-        ...dependency,
-        depends_on_title: dependency.depends_on_task?.title
-      });
+      return res.status(201).json(dep);
     }
 
     if (req.method === 'DELETE') {
-      const { depId } = req.query;
+      const { depends_on_id } = req.body;
+      
       const { error } = await supabase
         .from('dependencies')
         .delete()
-        .eq('id', depId);
+        .eq('task_id', id)
+        .eq('depends_on_id', depends_on_id);
 
       if (error) throw error;
+
       return res.status(200).json({ success: true });
     }
 

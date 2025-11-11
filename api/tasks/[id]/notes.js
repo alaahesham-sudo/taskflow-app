@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -21,26 +21,19 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
-      const { content, author } = req.body;
-
+      const { content, user_name } = req.body;
+      
       const { data: note, error } = await supabase
         .from('notes')
         .insert({
           task_id: id,
-          content,
-          author: author || 'Manager'
+          content: content || '',
+          user_name: user_name || 'Anonymous'
         })
         .select()
         .single();
 
       if (error) throw error;
-
-      await supabase.from('activity_log').insert({
-        task_id: id,
-        action: 'note_added',
-        details: `Note added: ${content.substring(0, 50)}...`,
-        user_name: author || 'Manager'
-      });
 
       return res.status(201).json(note);
     } catch (error) {
