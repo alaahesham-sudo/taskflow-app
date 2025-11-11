@@ -32,11 +32,11 @@ export default async function handler(req, res) {
       if (error) throw error;
 
       const tasksWithDetails = await Promise.all(tasks.map(async (task) => {
-        const [notesRes, depsRes, blockersRes] = await Promise.all([
-          supabase.from('notes').select('*').eq('task_id', task.id).order('created_at', { ascending: false }),
-          supabase.from('dependencies').select('*, depends_on_task:tasks!dependencies_depends_on_task_id_fkey(title)').eq('task_id', task.id),
-          supabase.from('dependencies').select('*, blocking_task:tasks!dependencies_task_id_fkey(title)').eq('depends_on_task_id', task.id).eq('type', 'blocks')
-        ]);
+        const notesQuery = supabase.from('notes').select('*').eq('task_id', task.id).order('created_at', { ascending: false });
+        const depsQuery = supabase.from('dependencies').select('*, depends_on_task:tasks!dependencies_depends_on_task_id_fkey(title)').eq('task_id', task.id);
+        const blockersQuery = supabase.from('dependencies').select('*, blocking_task:tasks!dependencies_task_id_fkey(title)').eq('depends_on_task_id', task.id).eq('type', 'blocks');
+        
+        const [notesRes, depsRes, blockersRes] = await Promise.all([notesQuery, depsQuery, blockersQuery]);
 
         return {
           ...task,
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
             blocking_title: b.blocking_task?.title
           }))
         };
-      });
+      }));
 
       return res.status(200).json(tasksWithDetails);
     }
