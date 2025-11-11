@@ -32,23 +32,37 @@ export default async function handler(req, res) {
       if (error) throw error;
 
       const tasksWithDetails = await Promise.all(tasks.map(async (task) => {
-        const notesQuery = supabase.from('notes').select('*').eq('task_id', task.id).order('created_at', { ascending: false });
-        const depsQuery = supabase.from('dependencies').select('*, depends_on_task:tasks!dependencies_depends_on_task_id_fkey(title)').eq('task_id', task.id);
-        const blockersQuery = supabase.from('dependencies').select('*, blocking_task:tasks!dependencies_task_id_fkey(title)').eq('depends_on_task_id', task.id).eq('type', 'blocks');
-        
-        const [notesRes, depsRes, blockersRes] = await Promise.all([notesQuery, depsQuery, blockersQuery]);
+        const notesRes = await supabase.from('notes').select('*').eq('task_id', task.id).order('created_at', { ascending: false });
+        const depsRes = await supabase.from('dependencies').select('*').eq('task_id', task.id);
+        const blockersRes = await supabase.from('dependencies').select('*').eq('depends_on_task_id', task.id).eq('type', 'blocks');
+
+        const dependencies = [];
+        if (depsRes.data) {
+          for (const dep of depsRes.data) {
+            const taskRes = await supabase.from('tasks').select('title').eq('id', dep.depends_on_task_id).single();
+            dependencies.push({
+              ...dep,
+              depends_on_title: taskRes.data?.title || 'Unknown'
+            });
+          }
+        }
+
+        const blockers = [];
+        if (blockersRes.data) {
+          for (const blocker of blockersRes.data) {
+            const taskRes = await supabase.from('tasks').select('title').eq('id', blocker.task_id).single();
+            blockers.push({
+              ...blocker,
+              blocking_title: taskRes.data?.title || 'Unknown'
+            });
+          }
+        }
 
         return {
           ...task,
           notes: notesRes.data || [],
-          dependencies: (depsRes.data || []).map(d => ({
-            ...d,
-            depends_on_title: d.depends_on_task?.title
-          })),
-          blockers: (blockersRes.data || []).map(b => ({
-            ...b,
-            blocking_title: b.blocking_task?.title
-          }))
+          dependencies: dependencies,
+          blockers: blockers
         };
       }));
 
